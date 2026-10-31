@@ -1,0 +1,2 @@
+porvider "aws" {
+}
