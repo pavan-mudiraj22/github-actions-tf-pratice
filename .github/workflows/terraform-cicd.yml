@@ -69,7 +69,7 @@ jobs:
       - name: Verify AWS Identity
         run: aws sts get-caller-identity
 
-      # Step 4: Install Terraform
+      # Step 4: Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
