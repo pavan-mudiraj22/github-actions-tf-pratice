@@ -17,22 +17,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout repository
+      # Step 1: Checkout GitHub repository
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Step 2: AWS OIDC Authentication
+      # Step 2: Authenticate with AWS using OIDC
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::583960588058:role/OICD-role
           aws-region: us-east-1
 
-      # Step 3: Verify AWS Authentication
+      # Step 3: Verify AWS authentication
       - name: Verify AWS Identity
         run: aws sts get-caller-identity
 
-      # Step 4: Connect to EC2 and Deploy Flask
+      # Step 4: Connect to EC2 and deploy Flask
       - name: Deploy Flask Application
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -42,26 +42,25 @@ jobs:
           port: 22
 
           script: |
+            set -e
+
             echo "Connected to EC2 successfully"
 
-            # Install required packages
+            # Install Python requirements
             sudo apt update
             sudo apt install -y python3 python3-pip python3-venv
 
             # Create application directory
-            mkdir -p ~/flask-app
-            cd ~/flask-app
+            mkdir -p /home/ubuntu/flask-app
+            cd /home/ubuntu/flask-app
 
             # Create virtual environment
             python3 -m venv venv
 
-            # Activate virtual environment
-            source venv/bin/activate
-
             # Install Flask
-            pip install flask
+            ./venv/bin/pip install flask
 
-            # Create Flask application
+            # Create Python Flask application
             cat > app.py <<'EOF'
             from flask import Flask
 
@@ -79,11 +78,29 @@ jobs:
                 app.run(host="0.0.0.0", port=5000)
             EOF
 
-            # Stop previous application if running
-            pkill -f "python app.py" || true
+            # Create systemd service
+            sudo tee /etc/systemd/system/flask-app.service > /dev/null <<'EOF'
+            [Unit]
+            Description=Python Flask Application
+            After=network.target
 
-            # Start Flask application in background
-            nohup ~/flask-app/venv/bin/python ~/flask-app/app.py > ~/flask-app/app.log 2>&1 < /dev/null &
+            [Service]
+            User=ubuntu
+            WorkingDirectory=/home/ubuntu/flask-app
+            ExecStart=/home/ubuntu/flask-app/venv/bin/python /home/ubuntu/flask-app/app.py
+            Restart=always
+            RestartSec=5
 
-            echo "Flask application deployment completed"
+            [Install]
+            WantedBy=multi-user.target
+            EOF
 
+            # Enable and restart Flask service
+            sudo systemctl daemon-reload
+            sudo systemctl enable flask-app
+            sudo systemctl restart flask-app
+
+            # Verify service
+            sudo systemctl is-active flask-app
+
+            echo "Flask application deployed successfully!"
