@@ -35,7 +35,16 @@ on:
     branches:
       - main
 
-# Required permissions for GitHub OIDC
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Choose Terraform Action"
+        required: true
+        type: choice
+        options:
+          - apply
+          - destroy
+
 permissions:
   id-token: write
   contents: read
@@ -45,36 +54,46 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout GitHub repository
+      # Step 1: Checkout GitHub Repository
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Step 2: Configure AWS credentials using OIDC
+      # Step 2: Configure AWS Credentials using OIDC
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::583960588058:role/OICD-role
           aws-region: us-east-1
 
-      # Step 3: Verify AWS authentication
+      # Step 3: Verify AWS Authentication
       - name: Verify AWS Identity
         run: aws sts get-caller-identity
 
       # Step 4: Install Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
 
-      # Step 5: Initialize Terraform
+      # Step 5: Terraform Init
       - name: Terraform Init
         run: terraform init
 
-      # Step 6: Validate Terraform configuration
+      # Step 6: Terraform Validate
       - name: Terraform Validate
         run: terraform validate
 
-      # Step 7: Generate Terraform execution plan
+      # Step 7: Terraform Plan
       - name: Terraform Plan
-        run: terraform plan
+        if: github.event_name == 'push' || inputs.action == 'apply'
+        run: terraform plan -out=tfplan
 
+      # Step 8: Terraform Apply
       - name: Terraform Apply
-        run: terraform apply -auto-approve
+        if: github.event_name == 'push' || inputs.action == 'apply'
+        run: terraform apply -auto-approve tfplan
+
+      # Step 9: Terraform Destroy
+      - name: Terraform Destroy
+        if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
+        run: terraform destroy -auto-approve
